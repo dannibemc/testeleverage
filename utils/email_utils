@@ -1,0 +1,25 @@
+import yagmail
+import os
+
+# Configure no .streamlit/secrets.toml
+SENDER = os.getenv("EMAIL_SENDER")
+PASSWORD = os.getenv("EMAIL_PASSWORD")
+
+def enviar_email_cobranca(row):
+    yag = yagmail.SMTP(SENDER, PASSWORD)
+    assunto = f"Cobrança - Obrigação: {row['descricao']}"
+    corpo = f"""
+    Prezado(a),
+
+    Esta é uma cobrança referente à obrigação da operação "{row['operacao']}" com vencimento em {row['data_vencimento']}.
+
+    Categoria: {row['categoria']}
+    Status: {row['status']}
+    Observações: {row['observacoes']}
+
+    Atenciosamente,
+    Sistema Leverage
+    """
+
+    destinatario = row.get("email", SENDER)  # fallback
+    yag.send(destinatario, assunto, corpo)
