@@ -1,0 +1,96 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from models import SessionLocal, Obrigacao, init_db
+from utils.ui import aplicar_tema_leverage
+
+# Configuração da página
+st.set_page_config(page_title="Dashboard - Leverage Obrigações", layout="wide")
+
+# Aplica o tema
+aplicar_tema_leverage()
+
+# Título da página
+st.title("📊 Dashboard")
+
+# Inicializa o banco de dados
+init_db()
+
+try:
+    # Conecta ao banco de dados
+    db = SessionLocal()
+
+    # Dados de obrigações
+    registros = db.query(Obrigacao).all()
+    
+    if registros:
+        df = pd.DataFrame([{
+            "Operação": r.operacao,
+            "Gestora": r.gestora,
+            "Categoria": r.categoria,
+            "Periodicidade": r.periodicidade,
+            "Data de Vencimento": r.data_vencimento,
+            "Status": r.status,
+            "Dias para Vencimento": r.dias_para_vencimento
+        } for r in registros])
+        
+        # Estatísticas
+        total_obrigacoes = len(df)
+        pendentes = len(df[df["Status"] == "Pendente"])
+        vencendo_7_dias = len(df[(df["Dias para Vencimento"] <= 7) & (df["Dias para Vencimento"] >= 0)])
+        
+        # Métricas principais
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total de Obrigações", total_obrigacoes)
+        
+        with col2:
+            st.metric("Obrigações Pendentes", pendentes)
+        
+        with col3:
+            st.metric("Vencendo em 7 dias", vencendo_7_dias)
+        
+        # Gráficos
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Obrigações por Status")
+            status_counts = df["Status"].value_counts().reset_index()
+            status_counts.columns = ["Status", "Quantidade"]
+            fig = px.pie(status_counts, values="Quantidade", names="Status", hole=0.4)
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("Obrigações por Categoria")
+            categoria_counts = df["Categoria"].value_counts().reset_index()
+            categoria_counts.columns = ["Categoria", "Quantidade"]
+            fig = px.bar(categoria_counts, x="Categoria", y="Quantidade")
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Timeline de vencimentos
+        st.subheader("Timeline de Vencimentos")
+        df_proximos = df[df["Dias para Vencimento"] >= 0].sort_values("Dias para Vencimento")
+        
+        if not df_proximos.empty:
+            fig = px.timeline(
+                df_proximos.head(15), 
+                x_start="Data de Vencimento", 
+                y="Operação",
+                color="Categoria",
+                hover_data=["Gestora", "Dias para Vencimento"]
+            )
+            fig.update_layout(height=500)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Não há obrigações com vencimentos futuros.")
+    else:
+        st.info("Não há obrigações cadastradas. Utilize a página de cadastro para começar.")
+        
+    # Fecha a conexão com o banco
+    db.close()
+except Exception as e:
+    st.error(f"Erro ao carregar o dashboard: {str(e)}")
+    st.info("Certifique-se de que o banco de dados foi inicializado corretamente.")
